@@ -15,6 +15,12 @@ type Task = {
   title: string;
   is_complete: boolean;
   created_at: string;
+  due_date: string | null;
+};
+
+type EditDraft = {
+  title: string;
+  dueDate: string;
 };
 
 const STORAGE_KEYS = {
@@ -35,8 +41,11 @@ export default function Home() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
+  const [taskDueDate, setTaskDueDate] = useState("");
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<EditDraft>({ title: "", dueDate: "" });
   const hasSupabase = hasSupabaseEnv && Boolean(supabase);
 
   function resetAuthInputs() {
@@ -53,7 +62,7 @@ export default function Home() {
 
     const { data, error } = await client
       .from("tasks")
-      .select("id, title, is_complete, created_at")
+      .select("id, title, is_complete, created_at, due_date")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
@@ -243,6 +252,7 @@ export default function Home() {
         title: taskTitle.trim(),
         is_complete: false,
         user_id: session.id,
+        due_date: taskDueDate || null,
       });
 
       if (error) {
@@ -253,12 +263,13 @@ export default function Home() {
 
       await loadSupabaseTasks(session.id);
     } else {
-      const nextTasks = sortTasks([createTask(taskTitle.trim()), ...tasks]);
+      const nextTasks = sortTasks([createTask(taskTitle.trim(), false, taskDueDate || null), ...tasks]);
       setTasks(nextTasks);
       window.localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(nextTasks));
     }
 
     setTaskTitle("");
+    setTaskDueDate("");
     setIsBusy(false);
   }
 
@@ -296,6 +307,51 @@ export default function Home() {
 
     setTasks(nextTasks);
     window.localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(nextTasks));
+  }
+
+  function startEditingTask(task: Task) {
+    setEditingTaskId(task.id);
+    setEditDraft({
+      title: task.title,
+      dueDate: task.due_date ?? "",
+    });
+    setMessage("");
+  }
+
+  function cancelEditingTask() {
+    setEditingTaskId(null);
+    setEditDraft({ title: "", dueDate: "" });
+  }
+
+  async function handleTaskSave(taskId: string) {
+    if (!session || !editDraft.title.trim()) {
+      return;
+    }
+
+    const updates = {
+      title: editDraft.title.trim(),
+      due_date: editDraft.dueDate || null,
+    };
+
+    if (session.mode === "supabase" && supabase) {
+      const { error } = await supabase.from("tasks").update(updates).eq("id", taskId);
+
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+
+      await loadSupabaseTasks(session.id);
+    } else {
+      const nextTasks = tasks.map((task) =>
+        task.id === taskId ? { ...task, ...updates } : task
+      );
+
+      setTasks(sortTasks(nextTasks));
+      window.localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(sortTasks(nextTasks)));
+    }
+
+    cancelEditingTask();
   }
 
   async function handleSignOut() {
@@ -423,22 +479,30 @@ export default function Home() {
             </p>
           </div>
 
-          <form className="task-entry" onSubmit={handleAddTask}>
-            <label className="field">
-              <span>New task</span>
-              <input
+            <form className="task-entry" onSubmit={handleAddTask}>
+              <label className="field">
+                <span>New task</span>
+                <input
                 value={taskTitle}
                 onChange={(event) => setTaskTitle(event.target.value)}
                 type="text"
                 maxLength={120}
                 placeholder="Add something you want to get done"
-                required
-              />
-            </label>
-            <button className="button button-primary" disabled={isBusy} type="submit">
-              {isBusy ? "Adding..." : "Add task"}
-            </button>
-          </form>
+                  required
+                />
+              </label>
+              <label className="field field-compact">
+                <span>Due date</span>
+                <input
+                  value={taskDueDate}
+                  onChange={(event) => setTaskDueDate(event.target.value)}
+                  type="date"
+                />
+              </label>
+              <button className="button button-primary" disabled={isBusy} type="submit">
+                {isBusy ? "Adding..." : "Add task"}
+              </button>
+            </form>
 
           {tasks.length === 0 ? (
             <div className="empty-state">
@@ -459,15 +523,77 @@ export default function Home() {
                     onChange={() => handleTaskToggle(task.id)}
                     type="checkbox"
                   />
-                  <div className="task-copy">
-                    <p className="task-title">{task.title}</p>
-                    <p className="task-detail">
-                      {task.is_complete
-                        ? "Completed and moved out of the way"
-                        : "Open and ready for action"}
-                    </p>
+                  <div className="task-main">
+                    {editingTaskId === task.id ? (
+                    <div className="task-edit-shell">
+                      <div className="task-edit-grid">
+                        <label className="field field-inline">
+                          <span>Task</span>
+                          <input
+                            value={editDraft.title}
+                            onChange={(event) =>
+                              setEditDraft((current) => ({ ...current, title: event.target.value }))
+                            }
+                            type="text"
+                            maxLength={120}
+                          />
+                        </label>
+                        <label className="field field-inline">
+                          <span>Due date</span>
+                          <input
+                            value={editDraft.dueDate}
+                            onChange={(event) =>
+                              setEditDraft((current) => ({ ...current, dueDate: event.target.value }))
+                            }
+                            type="date"
+                          />
+                        </label>
+                      </div>
+                      <div className="task-row-footer">
+                        <div className="task-meta">
+                          <span className="task-state">
+                            {task.is_complete ? "Completed" : "Active"}
+                          </span>
+                        </div>
+                        <div className="task-actions">
+                          <button
+                            className="button button-ghost button-small"
+                            onClick={cancelEditingTask}
+                            type="button"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            className="button button-secondary button-small"
+                            onClick={() => handleTaskSave(task.id)}
+                            type="button"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="task-display-row">
+                      <div className="task-copy">
+                        <p className="task-title">{task.title}</p>
+                      </div>
+                      <div className="task-actions task-actions-inline">
+                        {task.due_date ? (
+                          <span className="task-date-chip">{formatDueDate(task.due_date)}</span>
+                        ) : null}
+                        <button
+                          aria-label={`Edit ${task.title}`}
+                          className="icon-button"
+                          onClick={() => startEditingTask(task)}
+                          type="button"
+                        >
+                          <span aria-hidden="true">✎</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   </div>
-                  <span className="task-state">{task.is_complete ? "Done" : "Active"}</span>
                 </li>
               ))}
             </ul>
@@ -480,12 +606,13 @@ export default function Home() {
   );
 }
 
-function createTask(title: string, isComplete = false): Task {
+function createTask(title: string, isComplete = false, dueDate: string | null = null): Task {
   return {
     id: crypto.randomUUID(),
     title,
     is_complete: isComplete,
     created_at: new Date().toISOString(),
+    due_date: dueDate,
   };
 }
 
@@ -497,4 +624,12 @@ function sortTasks(taskList: Task[]) {
 
     return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
   });
+}
+
+function formatDueDate(dueDate: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(`${dueDate}T00:00:00`));
 }
