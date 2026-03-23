@@ -39,6 +39,11 @@ export default function Home() {
   const [isBusy, setIsBusy] = useState(false);
   const hasSupabase = hasSupabaseEnv && Boolean(supabase);
 
+  function resetAuthInputs() {
+    setEmail("");
+    setPassword("");
+  }
+
   const loadSupabaseTasks = useCallback(async (userId: string) => {
     const client = supabase;
 
@@ -193,8 +198,9 @@ export default function Home() {
     if (authMode === "signup") {
       setMessage("Account created. Check your email to confirm, then sign in.");
       setAuthMode("signin");
-      setPassword("");
+      resetAuthInputs();
     } else {
+      resetAuthInputs();
       setMessage("");
     }
 
@@ -294,6 +300,7 @@ export default function Home() {
 
   async function handleSignOut() {
     setMessage("");
+    resetAuthInputs();
 
     if (session?.mode === "supabase" && supabase) {
       await supabase.auth.signOut();
@@ -318,9 +325,7 @@ export default function Home() {
               A real-stack version of our team exercise. You can run in demo mode now
               or connect Supabase for live auth and task data.
             </p>
-            <div className="status-badge">
-              {hasSupabase ? "Supabase available" : "Demo mode active"}
-            </div>
+            {!hasSupabase ? <div className="status-badge">Demo mode active</div> : null}
           </section>
 
           <section className="panel auth-panel">
@@ -363,14 +368,20 @@ export default function Home() {
             <div className="inline-actions">
               <button
                 className="button button-secondary"
-                onClick={() => setAuthMode(authMode === "signin" ? "signup" : "signin")}
+                onClick={() => {
+                  setAuthMode(authMode === "signin" ? "signup" : "signin");
+                  resetAuthInputs();
+                  setMessage("");
+                }}
                 type="button"
               >
                 {authMode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
               </button>
-              <button className="button button-ghost" onClick={handleDemoLogin} type="button">
-                Continue in demo mode
-              </button>
+              {!hasSupabase ? (
+                <button className="button button-ghost" onClick={handleDemoLogin} type="button">
+                  Continue in demo mode
+                </button>
+              ) : null}
             </div>
 
             <p className="feedback">{message}</p>
