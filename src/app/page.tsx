@@ -190,11 +190,14 @@ export default function Home() {
       return;
     }
 
-    setMessage(
-      authMode === "signup"
-        ? "Account created. If email confirmation is enabled, check your inbox."
-        : "Signed in."
-    );
+    if (authMode === "signup") {
+      setMessage("Account created. Check your email to confirm, then sign in.");
+      setAuthMode("signin");
+      setPassword("");
+    } else {
+      setMessage("");
+    }
+
     setIsBusy(false);
   }
 

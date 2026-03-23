@@ -66,6 +66,7 @@ button {
   min-height: 100vh;
   display: grid;
   align-content: center;
+  justify-items: center;
   padding: 28px 0;
 }
 
@@ -93,6 +94,11 @@ button {
   margin: 0;
   line-height: 1.05;
   letter-spacing: -0.05em;
+}
+
+.panel-heading h2,
+.dashboard-intro h2 {
+  font-size: clamp(2rem, 4vw, 2.8rem);
 }
 
 .hero h1 {
